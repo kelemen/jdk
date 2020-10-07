@@ -34,6 +34,7 @@ import com.sun.tools.javac.file.JavacFileManager;
 import com.sun.tools.javac.parser.Tokens.Comment.CommentStyle;
 import com.sun.tools.javac.resources.CompilerProperties.Errors;
 import com.sun.tools.javac.resources.CompilerProperties.Warnings;
+import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.JCDiagnostic.*;
 
@@ -58,6 +59,23 @@ public class JavaTokenizer extends UnicodeReader {
      * If true then prints token information after each nextToken().
      */
     private static final boolean scannerDebug = false;
+
+    /**
+     * This character is used to mark the places where the string expressions
+     * will be inserted into. This is required to keep text blocks being processed
+     * by the {@link String#stripIndent()} method work properly.
+     * <p>
+     * The only fact we exploit about this character is that it cannot be
+     * expressed by any other means than to write it plainly into the string
+     * with the exception of unicode escaping (which is done by {@link UnicodeReader}), and that
+     * transformations done by the text block normalization treats it as non-indenting character.
+     */
+    private static final char ESCAPED_EXPRESSION_MARKER = '#';
+
+    /**
+     * The parser factory to parse subtoken expressions.
+     */
+    private final ChildParserFactory childParserFactory;
 
     /**
      * Sentinal for non-value.
@@ -107,7 +125,7 @@ public class JavaTokenizer extends UnicodeReader {
     /**
      * The position where a lexical error occurred;
      */
-    protected int errPos = Position.NOPOS;
+    protected int errPos;
 
     /**
      * true if is a text block, set by nextToken().
@@ -118,6 +136,20 @@ public class JavaTokenizer extends UnicodeReader {
      * true if contains escape sequences, set by nextToken().
      */
     protected boolean hasEscapeSequences;
+
+    /**
+     * Marks the index of the {@link #ESCAPED_EXPRESSION_MARKER} character
+     * a subsequent escaped expression is to put and replace.
+     */
+    protected int nextExpressionMarkerIndex;
+
+    protected boolean unclosedExpression;
+
+    /**
+     * The current expressions escaped within the scanned string.
+     * The location of expressions are marked by {@link #ESCAPED_EXPRESSION_MARKER}.
+     */
+    protected List<EscapedExpression> escapedExpressions;
 
     /**
      * Buffer for building literals, used by nextToken().
@@ -141,9 +173,10 @@ public class JavaTokenizer extends UnicodeReader {
      *
      * @param fac  the factory which created this Scanner.
      * @param cb   the input character buffer.
+     * @param childParserFactory the parser factory to parse subtoken expressions.
      */
-    protected JavaTokenizer(ScannerFactory fac, CharBuffer cb) {
-        this(fac, JavacFileManager.toArray(cb), cb.limit());
+    protected JavaTokenizer(ScannerFactory fac, CharBuffer cb, ChildParserFactory childParserFactory) {
+        this(fac, JavacFileManager.toArray(cb), cb.limit(), childParserFactory);
     }
 
     /**
@@ -152,9 +185,11 @@ public class JavaTokenizer extends UnicodeReader {
      * @param fac     the factory which created this Scanner
      * @param array   the input character array.
      * @param length  The length of the meaningful content in the array.
+     * @param childParserFactory the parser factory to parse subtoken expressions.
      */
-    protected JavaTokenizer(ScannerFactory fac, char[] array, int length) {
+    protected JavaTokenizer(ScannerFactory fac, char[] array, int length, ChildParserFactory childParserFactory) {
         super(fac, array, length);
+        this.childParserFactory = childParserFactory;
         this.fac = fac;
         this.log = fac.log;
         this.names = fac.names;
@@ -162,7 +197,34 @@ public class JavaTokenizer extends UnicodeReader {
         this.source = fac.source;
         this.preview = fac.preview;
         this.lint = fac.lint;
+        this.errPos = Position.NOPOS;
+        this.escapedExpressions = List.nil();
         this.sb = new StringBuilder(256);
+    }
+
+    protected JavaTokenizer(JavaTokenizer parent) {
+        super(parent);
+
+        this.childParserFactory = parent.childParserFactory;
+        this.source = parent.source;
+        this.preview = parent.preview;
+        this.log = parent.log;
+        this.tokens = parent.tokens;
+        this.names = parent.names;
+        this.tk = parent.tk;
+        this.radix = parent.radix;
+        this.name = parent.name;
+        this.errPos = Position.NOPOS;
+        this.isTextBlock = false;
+        this.escapedExpressions = List.nil();
+        this.hasEscapeSequences = false;
+        this.sb = new StringBuilder(256);
+        this.fac = parent.fac;
+        this.lint = parent.lint;
+    }
+
+    public JavaTokenizer copy() {
+        return new JavaTokenizer(this);
     }
 
     /**
@@ -269,25 +331,6 @@ public class JavaTokenizer extends UnicodeReader {
     }
 
     /**
-     * If the specified character ch matches the current character then add current character
-     * to the literal buffer and then advance.
-     *
-     * @param ch  character to match.
-     *
-     * @return true if ch matches current character.
-     */
-    protected boolean acceptThenPut(char ch) {
-        if (is(ch)) {
-            put(get());
-            next();
-
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
      * If either ch1 or ch2 matches the current character then add current character
      * to the literal buffer and then advance.
      *
@@ -326,15 +369,64 @@ public class JavaTokenizer extends UnicodeReader {
         processLineTerminator(start, position());
     }
 
+    private void scanEscapedExpression(int previousLiteralPartPos) {
+        JavacParser parser = childParserFactory.newParser(copy());
+        JCTree.JCExpression expression = parser.parseExpression();
+        Token expressionClosingToken = parser.token();
+
+        JCTree.JCExpression firstExpressionError = null;
+
+        if (expressionClosingToken.kind != TokenKind.RBRACE) {
+            firstExpressionError = parser.syntaxError(expressionClosingToken.pos, List.of(expression), Errors.MissingEscapedExpressionTermination);
+        }
+
+        int targetPos = expressionClosingToken.pos;
+        while (position() < targetPos) {
+            if (!isAvailable()) {
+                Assert.error("Cannot reach the end of escaped expression.");
+            } else if (isEOLN()) {
+                if (firstExpressionError == null) {
+                    firstExpressionError = parser.syntaxError(position(), List.of(expression), Errors.IllegalLineEndInEscapedExpression);
+                }
+            }
+            next();
+        }
+
+        if (firstExpressionError != null) {
+            expression = firstExpressionError;
+        }
+
+        escapedExpressions = escapedExpressions
+                .prepend(new EscapedExpression(nextExpressionMarkerIndex, expression, previousLiteralPartPos));
+        nextExpressionMarkerIndex++;
+        unclosedExpression = true;
+
+        put(ESCAPED_EXPRESSION_MARKER);
+    }
+
     /**
      * Processes the current character and places in the literal buffer. If the current
      * character is a backslash then the next character is validated as a proper
      * escape character. Conversion of escape sequences takes place at end of nextToken().
      *
      * @param pos position of the first character in literal.
+     * @param allowEscapedExpression if \{expression} should be allowed or not
      */
-    private void scanLitChar(int pos) {
-        if (acceptThenPut('\\')) {
+    private void scanLitChar(int pos, boolean allowEscapedExpression) {
+        char firstCh = get();
+        boolean escaping = firstCh == '\\';
+        if (escaping) {
+            int previousLiteralPartPos = position();
+            char secondCh = next();
+            if (secondCh == '{' && allowEscapedExpression) {
+                next();
+                scanEscapedExpression(previousLiteralPartPos);
+                return;
+            }
+            put(firstCh);
+        }
+
+        if (escaping) {
             hasEscapeSequences = true;
 
             switch (get()) {
@@ -384,7 +476,16 @@ public class JavaTokenizer extends UnicodeReader {
                     break;
             }
         } else {
-            putThenNext();
+            if (unclosedExpression && firstCh == '}') {
+                next();
+                unclosedExpression = false;
+                escapedExpressions.head.nextLiteralStartPos = position();
+            } else {
+                if (firstCh == ESCAPED_EXPRESSION_MARKER) {
+                    nextExpressionMarkerIndex++;
+                }
+                putThenNext();
+            }
         }
     }
 
@@ -396,6 +497,9 @@ public class JavaTokenizer extends UnicodeReader {
     private void scanString(int pos) {
         // Assume the best.
         tk = Tokens.TokenKind.STRINGLITERAL;
+        unclosedExpression = false;
+        nextExpressionMarkerIndex = 0;
+        escapedExpressions = List.nil();
         // Track the end of first line for error recovery.
         int firstEOLN = NOT_FOUND;
         // Check for text block delimiter.
@@ -433,7 +537,7 @@ public class JavaTokenizer extends UnicodeReader {
                     }
                 } else {
                     // Add character to string buffer.
-                    scanLitChar(pos);
+                    scanLitChar(pos, true);
                 }
             }
         } else {
@@ -452,7 +556,7 @@ public class JavaTokenizer extends UnicodeReader {
                     break;
                 } else {
                     // Add character to string buffer.
-                    scanLitChar(pos);
+                    scanLitChar(pos, true);
                 }
             }
         }
@@ -980,7 +1084,7 @@ public class JavaTokenizer extends UnicodeReader {
                             lexError(pos, Errors.IllegalLineEndInCharLit);
                         }
 
-                        scanLitChar(pos);
+                        scanLitChar(pos, false);
 
                         if (accept('\'')) {
                             tk = TokenKind.CHARLITERAL;
@@ -1081,8 +1185,12 @@ public class JavaTokenizer extends UnicodeReader {
                 }
 
                 if (tk.tag == Token.Tag.STRING) {
-                    // Build string token.
-                    return new StringToken(tk, pos, endPos, string, comments);
+                    if (escapedExpressions.isEmpty()) {
+                        // Build string token.
+                        return new StringToken(tk, pos, endPos, string, comments);
+                    } else {
+                        return buildInterpolatedStringToken(pos, endPos, string, comments);
+                    }
                 } else {
                     // Build numeric token.
                     return new NumericToken(tk, pos, endPos, string, radix, comments);
@@ -1098,6 +1206,73 @@ public class JavaTokenizer extends UnicodeReader {
                                        + "|");
             }
         }
+    }
+
+
+    private InterpolatedStringToken buildInterpolatedStringToken(
+            int pos,
+            int endPos,
+            String string,
+            List<Comment> comments) {
+
+        List<EscapedExpression> orderedEscapedExpressions = escapedExpressions.reverse();
+        // Just allow them to be garbage collected
+        escapedExpressions = List.nil();
+
+        List<Object> stringParts = List.nil();
+
+        int previousLiteralPartStartPos = pos;
+
+        // Indexing into `string`
+        int markerIndex = -1;
+        int partStartIndex = 0;
+        int charIndex = 0;
+
+        expressionLoop:
+        while (!orderedEscapedExpressions.isEmpty()) {
+            EscapedExpression head = orderedEscapedExpressions.head;
+            orderedEscapedExpressions = orderedEscapedExpressions.tail;
+            if (head.markerIndex < 0) {
+                stringParts = stringParts.prepend(head.expression);
+                continue;
+            }
+
+            for (; charIndex < string.length(); charIndex++) {
+                if (string.charAt(charIndex) == ESCAPED_EXPRESSION_MARKER) {
+                    markerIndex++;
+                    if (markerIndex == head.markerIndex) {
+                        if (charIndex > partStartIndex) {
+                            stringParts = stringParts.prepend(new StringToken(
+                                    tk,
+                                    previousLiteralPartStartPos,
+                                    head.previousLiteralPartEndPos,
+                                    string.substring(partStartIndex, charIndex),
+                                    List.nil()
+                            ));
+                        }
+                        charIndex++;
+
+                        previousLiteralPartStartPos = head.nextLiteralStartPos;
+                        partStartIndex = charIndex;
+
+                        stringParts = stringParts.prepend(head.expression);
+                        continue expressionLoop;
+                    }
+                }
+            }
+        }
+
+        if (string.length() > partStartIndex) {
+            stringParts = stringParts.prepend(new StringToken(
+                    tk,
+                    previousLiteralPartStartPos,
+                    endPos,
+                    string.substring(partStartIndex),
+                    List.nil()
+            ));
+        }
+
+        return new InterpolatedStringToken(pos, endPos, comments, stringParts.reverse());
     }
 
     /**
@@ -1195,6 +1370,27 @@ public class JavaTokenizer extends UnicodeReader {
      */
     public Position.LineMap getLineMap() {
         return Position.makeLineMap(getRawCharacters(), length(), false);
+    }
+
+    protected static class EscapedExpression {
+        /**
+         * The index of the {@link #ESCAPED_EXPRESSION_MARKER} from the beginning of the string,
+         * including the characters that are actually part of the string as well.
+         * <p>
+         * {@code -1} if this is an error token.
+         */
+        protected final int markerIndex;
+        protected final JCTree.JCExpression expression;
+
+        protected final int previousLiteralPartEndPos;
+        protected int nextLiteralStartPos;
+
+        public EscapedExpression(int markerIndex, JCTree.JCExpression expression, int previousLiteralPartEndPos) {
+            this.previousLiteralPartEndPos = previousLiteralPartEndPos;
+            this.markerIndex = markerIndex;
+            this.expression = expression;
+            this.nextLiteralStartPos = -1;
+        }
     }
 
     /**

@@ -470,6 +470,12 @@ public class TreeMaker implements JCTree.Factory {
         return tree;
     }
 
+    public JCInterpolatedString InterpolatedString(List<JCExpression> stringParts) {
+        JCInterpolatedString tree = new JCInterpolatedString(stringParts);
+        tree.pos = pos;int x = 0; int y = x++;
+        return tree;
+    }
+
     public JCTypeCast TypeCast(JCTree clazz, JCExpression expr) {
         JCTypeCast tree = new JCTypeCast(clazz, expr);
         tree.pos = pos;

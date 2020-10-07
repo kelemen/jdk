@@ -57,6 +57,7 @@ import com.sun.tools.javac.tree.JCTree.JCIdent;
 import com.sun.tools.javac.tree.JCTree.JCIf;
 import com.sun.tools.javac.tree.JCTree.JCImport;
 import com.sun.tools.javac.tree.JCTree.JCInstanceOf;
+import com.sun.tools.javac.tree.JCTree.JCInterpolatedString;
 import com.sun.tools.javac.tree.JCTree.JCLabeledStatement;
 import com.sun.tools.javac.tree.JCTree.JCLambda;
 import com.sun.tools.javac.tree.JCTree.JCLiteral;
@@ -253,6 +254,12 @@ public class TreeDiffer extends TreeScanner {
                 scan(tree.lhs, that.lhs)
                         && scan(tree.rhs, that.rhs)
                         && tree.operator == that.operator;
+    }
+
+    @Override
+    public void visitInterpolatedString(JCInterpolatedString tree) {
+        JCInterpolatedString that = (JCInterpolatedString) parameter;
+        result = scan(tree.stringParts, that.getStringParts());
     }
 
     @Override

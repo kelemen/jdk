@@ -305,6 +305,17 @@ strictfp class ConstFold {
         }
     }
 
+    Type tryFoldToString(List<Type> types) {
+        StringBuilder constValue = new StringBuilder();
+        for (Type type : types) {
+            if (type.constValue() == null) {
+                return null;
+            }
+            constValue.append(type.stringValue());
+        }
+        return syms.stringType.constType(constValue.toString());
+    }
+
     /** Coerce constant type to target type.
      *  @param etype      The source type of the coercion,
      *                    which is assumed to be a constant type compatible with

@@ -4041,6 +4041,21 @@ public class Attr extends JCTree.Visitor {
         result = check(tree, owntype, KindSelector.VAL, resultInfo);
     }
 
+    @Override
+    public void visitInterpolatedString(JCInterpolatedString tree) {
+        List<Type> types = List.nil();
+        for (JCExpression child : tree.stringParts) {
+            // This could be done in List.map, but feels wrong to have side effect in the mapping function.
+            Type currentType = chk.checkNonVoid(child.pos(), attribExpr(child, env));
+            types = types.prepend(currentType);
+        }
+
+        Type foldedType = cfolder.tryFoldToString(types.reverse());
+
+        Type owntype = foldedType != null ? foldedType : syms.stringType;
+        result = check(tree, owntype, KindSelector.VAL, resultInfo);
+    }
+
     public void visitTypeCast(final JCTypeCast tree) {
         Type clazztype = attribType(tree.clazz, env);
         chk.validate(tree.clazz, env, false);

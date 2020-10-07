@@ -346,6 +346,12 @@ public class TreeTranslator extends JCTree.Visitor {
         result = tree;
     }
 
+    @Override
+    public void visitInterpolatedString(JCInterpolatedString tree) {
+        tree.stringParts = translate(tree.stringParts);
+        result = tree;
+    }
+
     public void visitTypeCast(JCTypeCast tree) {
         tree.clazz = translate(tree.clazz);
         tree.expr = translate(tree.expr);

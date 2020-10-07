@@ -33,6 +33,7 @@ import com.sun.tools.javac.code.Source;
 import com.sun.tools.javac.util.Context;
 import com.sun.tools.javac.util.Log;
 import com.sun.tools.javac.util.Names;
+import java.util.Objects;
 
 
 /**
@@ -73,22 +74,59 @@ public class ScannerFactory {
         this.lint = Lint.instance(context);
     }
 
-    public Scanner newScanner(CharSequence input, boolean keepDocComments) {
+    public Scanner newScanner(CharSequence input, boolean keepDocComments, boolean keepEndPos, boolean keepLineMap, boolean parseModuleInfo, ParserFactory parserFactory) {
+        ChildParserFactory childParserFactory = new ChildParserFactoryImpl(keepDocComments, keepEndPos, keepLineMap, parseModuleInfo, parserFactory);
+        return newScanner(input, keepDocComments, childParserFactory);
+    }
+
+    public Scanner newScanner(CharSequence input, boolean keepDocComments, ChildParserFactory childParserFactory) {
         if (input instanceof CharBuffer charBuffer) {
             if (keepDocComments)
-                return new Scanner(this, new JavadocTokenizer(this, charBuffer));
+                return newScanner(new JavadocTokenizer(this, charBuffer, childParserFactory));
             else
-                return new Scanner(this, charBuffer);
+                return newScanner(new JavaTokenizer(this, charBuffer, childParserFactory));
         } else {
             char[] array = input.toString().toCharArray();
-            return newScanner(array, array.length, keepDocComments);
+            return newScanner(array, array.length, keepDocComments, childParserFactory);
         }
     }
 
-    public Scanner newScanner(char[] input, int inputLength, boolean keepDocComments) {
+    public Scanner newScanner(char[] input, int inputLength, boolean keepDocComments, ChildParserFactory childParserFactory) {
         if (keepDocComments)
-            return new Scanner(this, new JavadocTokenizer(this, input, inputLength));
+            return newScanner(new JavadocTokenizer(this, input, inputLength, childParserFactory));
         else
-            return new Scanner(this, input, inputLength);
+            return newScanner(new JavaTokenizer(this, input, inputLength, childParserFactory));
+    }
+
+    private Scanner newScanner(JavaTokenizer tokenizer) {
+        return new Scanner(this, tokenizer);
+    }
+
+    private class ChildParserFactoryImpl implements ChildParserFactory {
+        private final ParserFactory parserFactory;
+        private final boolean keepDocComments;
+        private final boolean keepEndPos;
+        private final boolean keepLineMap;
+        private final boolean parseModuleInfo;
+
+        public ChildParserFactoryImpl(
+                boolean keepDocComments,
+                boolean keepEndPos,
+                boolean keepLineMap,
+                boolean parseModuleInfo,
+                ParserFactory parserFactory) {
+
+            this.parserFactory = parserFactory;
+            this.keepDocComments = keepDocComments;
+            this.keepEndPos = keepEndPos;
+            this.keepLineMap = keepLineMap;
+            this.parseModuleInfo = parseModuleInfo;
+        }
+
+        @Override
+        public JavacParser newParser(JavaTokenizer childInput) {
+            Scanner scanner = newScanner(childInput);
+            return parserFactory.newParser(scanner, keepDocComments, keepEndPos, keepLineMap, parseModuleInfo);
+        }
     }
 }

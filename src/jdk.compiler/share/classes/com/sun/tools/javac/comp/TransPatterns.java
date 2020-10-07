@@ -47,6 +47,7 @@ import com.sun.tools.javac.tree.JCTree.JCForLoop;
 import com.sun.tools.javac.tree.JCTree.JCIdent;
 import com.sun.tools.javac.tree.JCTree.JCIf;
 import com.sun.tools.javac.tree.JCTree.JCInstanceOf;
+import com.sun.tools.javac.tree.JCTree.JCInterpolatedString;
 import com.sun.tools.javac.tree.JCTree.JCLabeledStatement;
 import com.sun.tools.javac.tree.JCTree.JCMethodDecl;
 import com.sun.tools.javac.tree.JCTree.JCSwitch;
@@ -568,6 +569,17 @@ public class TransPatterns extends TreeTranslator {
         bindingContext = new BasicBindingContext();
         try {
             super.visitBinary(tree);
+            result = bindingContext.decorateExpression(tree);
+        } finally {
+            bindingContext.pop();
+        }
+    }
+
+    @Override
+    public void visitInterpolatedString(JCInterpolatedString tree) {
+        bindingContext = new BasicBindingContext();
+        try {
+            super.visitInterpolatedString(tree);
             result = bindingContext.decorateExpression(tree);
         } finally {
             bindingContext.pop();

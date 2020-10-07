@@ -45,10 +45,6 @@ import java.util.regex.Pattern;
  *  deletion without notice.</b>
  */
 public class JavadocTokenizer extends JavaTokenizer {
-    /**
-     * The factory that created this Scanner.
-     */
-    final ScannerFactory fac;
 
     /**
      * Create a tokenizer from the input character buffer. The input buffer
@@ -58,9 +54,8 @@ public class JavadocTokenizer extends JavaTokenizer {
      * @param fac  the factory which created this Scanner.
      * @param cb   the input character buffer.
      */
-    protected JavadocTokenizer(ScannerFactory fac, CharBuffer cb) {
-        super(fac, cb);
-        this.fac = fac;
+    protected JavadocTokenizer(ScannerFactory fac, CharBuffer cb, ChildParserFactory childParserFactory) {
+        super(fac, cb, childParserFactory);
     }
 
     /**
@@ -72,9 +67,8 @@ public class JavadocTokenizer extends JavaTokenizer {
      * @param array   input character array.
      * @param length  length of the meaningful content in the array.
      */
-    protected JavadocTokenizer(ScannerFactory fac, char[] array, int length) {
-        super(fac, array, length);
-        this.fac = fac;
+    protected JavadocTokenizer(ScannerFactory fac, char[] array, int length, ChildParserFactory childParserFactory) {
+        super(fac, array, length, childParserFactory);
     }
 
     @Override

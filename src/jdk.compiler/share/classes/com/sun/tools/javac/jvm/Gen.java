@@ -816,6 +816,11 @@ public class Gen extends JCTree.Visitor {
         }
 
         @Override
+        public void visitInterpolatedString(JCInterpolatedString tree) {
+            tree.stringParts.forEach(child -> child.accept(this));
+        }
+
+        @Override
         public void visitSelect(JCFieldAccess tree) {
             if (tree.selected.type.hasTag(CLASS)) {
                 makeRef(tree.selected.pos(), tree.selected.type);
@@ -2133,6 +2138,11 @@ public class Gen extends JCTree.Visitor {
         callMethod(tree.pos(), syms.objectsType, names.requireNonNull,
                    List.of(syms.objectType), true);
         code.emitop0(pop);
+    }
+
+    @Override
+    public void visitInterpolatedString(JCInterpolatedString interpolatedString) {
+        result = concat.makeConcat(interpolatedString);
     }
 
     public void visitBinary(JCBinary tree) {

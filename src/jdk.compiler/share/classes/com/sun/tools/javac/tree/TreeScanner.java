@@ -293,6 +293,11 @@ public class TreeScanner extends Visitor {
         scan(tree.rhs);
     }
 
+    @Override
+    public void visitInterpolatedString(JCInterpolatedString tree) {
+        tree.stringParts.forEach(this::scan);
+    }
+
     public void visitTypeCast(JCTypeCast tree) {
         scan(tree.clazz);
         scan(tree.expr);

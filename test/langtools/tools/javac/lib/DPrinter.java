@@ -872,6 +872,11 @@ public class DPrinter {
         }
 
         @Override
+        public void visitInterpolatedString(JCInterpolatedString that) {
+            printList("stringPart", that.stringParts);
+        }
+
+        @Override
         public void visitTypeCast(JCTypeCast tree) {
             printTree("clazz", tree.clazz);
             printTree("expr", tree.expr);

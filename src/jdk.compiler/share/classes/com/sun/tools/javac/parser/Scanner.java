@@ -67,17 +67,8 @@ public class Scanner implements Lexer {
      * {@code input[input.length -1]} is a white space character.
      *
      * @param fac the factory which created this Scanner
-     * @param buf the input, might be modified
-     * Must be positive and less than or equal to input.length.
+     * @param tokenizer the input to be scanned
      */
-    protected Scanner(ScannerFactory fac, CharBuffer buf) {
-        this(fac, new JavaTokenizer(fac, buf));
-    }
-
-    protected Scanner(ScannerFactory fac, char[] buf, int inputLength) {
-        this(fac, new JavaTokenizer(fac, buf, inputLength));
-    }
-
     protected Scanner(ScannerFactory fac, JavaTokenizer tokenizer) {
         this.tokenizer = tokenizer;
         tokens = fac.tokens;

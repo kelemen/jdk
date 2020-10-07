@@ -37,7 +37,8 @@ import com.sun.tools.javac.util.*;
 import static com.sun.tools.javac.code.Kinds.Kind.MTH;
 import static com.sun.tools.javac.code.TypeTag.*;
 import static com.sun.tools.javac.jvm.ByteCodes.*;
-import static com.sun.tools.javac.tree.JCTree.Tag.PLUS;
+import static com.sun.tools.javac.tree.JCTree.Tag.*;
+
 import com.sun.tools.javac.jvm.Items.*;
 
 import java.util.HashMap;
@@ -118,6 +119,7 @@ public abstract class StringConcat {
 
     public abstract Item makeConcat(JCTree.JCAssignOp tree);
     public abstract Item makeConcat(JCTree.JCBinary tree);
+    public abstract Item makeConcat(JCTree.JCInterpolatedString tree);
 
     protected List<JCTree> collectAll(JCTree tree) {
         return collect(tree, List.nil());
@@ -131,12 +133,21 @@ public abstract class StringConcat {
 
     private List<JCTree> collect(JCTree tree, List<JCTree> res) {
         tree = TreeInfo.skipParens(tree);
-        if (tree.hasTag(PLUS) && tree.type.constValue() == null) {
-            JCTree.JCBinary op = (JCTree.JCBinary) tree;
-            if (op.operator.kind == MTH && op.operator.opcode == string_add) {
-                return res
-                        .appendList(collect(op.lhs, res))
-                        .appendList(collect(op.rhs, res));
+        if (tree.type.constValue() == null) {
+            if (tree.hasTag(PLUS)) {
+                JCTree.JCBinary op = (JCTree.JCBinary) tree;
+                if (op.operator.kind == MTH && op.operator.opcode == string_add) {
+                    return res
+                            .appendList(collect(op.lhs, res))
+                            .appendList(collect(op.rhs, res));
+                }
+            } else if (tree.hasTag(INTERPOLATED_STRING)) {
+                List<JCTree.JCExpression> parts = ((JCTree.JCInterpolatedString) tree).stringParts;
+                List<JCTree> collectedParts = res;
+                for (JCTree.JCExpression part : parts) {
+                    collectedParts = collectedParts.appendList(collect(part, res));
+                }
+                return collectedParts;
             }
         }
         return res.append(tree);
@@ -204,13 +215,21 @@ public abstract class StringConcat {
 
         @Override
         public Item makeConcat(JCTree.JCBinary tree) {
+            return makeConcat(tree, collectAll(tree));
+        }
+
+        @Override
+        public Item makeConcat(JCTree.JCInterpolatedString tree) {
+            return makeConcat(tree, List.nil());
+        }
+
+        private Item makeConcat(JCTree tree, List<JCTree> args) {
             JCDiagnostic.DiagnosticPosition pos = tree.pos();
 
             // Create a string builder.
             newStringBuilder(tree);
 
             // Append all strings to builder.
-            List<JCTree> args = collectAll(tree);
             for (JCTree t : args) {
                 gen.genExpr(t, t.type).load();
                 appendString(t);
@@ -271,7 +290,15 @@ public abstract class StringConcat {
 
         @Override
         public Item makeConcat(JCTree.JCBinary tree) {
-            List<JCTree> args = collectAll(tree.lhs, tree.rhs);
+            return makeConcat(tree, collectAll(tree.lhs, tree.rhs));
+        }
+
+        @Override
+        public Item makeConcat(JCTree.JCInterpolatedString tree) {
+            return makeConcat(tree, collectAll(tree));
+        }
+
+        private Item makeConcat(JCTree tree, List<JCTree> args) {
             emit(tree.pos(), args, true, tree.type);
             return gen.getItems().makeStackItem(syms.stringType);
         }

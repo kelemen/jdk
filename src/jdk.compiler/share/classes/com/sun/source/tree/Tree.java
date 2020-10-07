@@ -606,6 +606,12 @@ public interface Tree {
         NULL_LITERAL(LiteralTree.class),
 
         /**
+         * Used for instances of {@link InterpolatedStringTree} representing
+         * a string containing escaped expressions.
+         */
+        INTERPOLATED_STRING(InterpolatedStringTree.class),
+
+        /**
          * Used for instances of {@link WildcardTree} representing
          * an unbounded wildcard type argument.
          */

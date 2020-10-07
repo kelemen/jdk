@@ -23,6 +23,7 @@
 
 package sampleapi.generator;
 
+import com.sun.tools.javac.parser.ParserFactory;
 import java.util.ArrayList;
 import java.util.Set;
 import javax.lang.model.element.Modifier;
@@ -45,11 +46,13 @@ class Documentifier {
     static Documentifier instance;
 
     final DocCommentGenerator docGen;
+    final ParserFactory parserFactory;
     final ScannerFactory scanners;
 
     private Documentifier(Context context) {
         docGen = new DocCommentGenerator();
         scanners = ScannerFactory.instance(context);
+        parserFactory = ParserFactory.instance(context);
     }
 
     public static Documentifier instance(Context context) {
@@ -111,7 +114,7 @@ class Documentifier {
                                    .append("/**")
                                    .append(docString)
                                    .append("*/");
-        Scanner scanner = scanners.newScanner(docComment, true);
+        Scanner scanner = scanners.newScanner(docComment, true, false, false, false, parserFactory);
         scanner.nextToken();
         Token token = scanner.token();
         return token.comment(CommentStyle.JAVADOC);

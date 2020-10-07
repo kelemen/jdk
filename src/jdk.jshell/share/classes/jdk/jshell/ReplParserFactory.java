@@ -49,19 +49,21 @@ class ReplParserFactory extends ParserFactory {
         }
     }
 
+    private final ParserFactory parserFactory;
     private final ScannerFactory scannerFactory;
             final Source source;
 
     protected ReplParserFactory(Context context, boolean forceExpression) {
         super(context);
         this.forceExpression = forceExpression;
+        this.parserFactory = ParserFactory.instance(context);
         this.scannerFactory = ScannerFactory.instance(context);
         this.source = Source.instance(context);
     }
 
     @Override
     public JavacParser newParser(CharSequence input, boolean keepDocComments, boolean keepEndPos, boolean keepLineMap) {
-        com.sun.tools.javac.parser.Lexer lexer = scannerFactory.newScanner(input, keepDocComments);
+        com.sun.tools.javac.parser.Lexer lexer = scannerFactory.newScanner(input, keepDocComments, keepEndPos, keepLineMap, false, parserFactory);
         return new ReplParser(this, lexer, keepDocComments, keepLineMap, keepEndPos, forceExpression);
     }
 

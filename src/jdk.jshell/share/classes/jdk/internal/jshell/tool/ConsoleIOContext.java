@@ -25,6 +25,9 @@
 
 package jdk.internal.jshell.tool;
 
+import javax.tools.JavaCompiler;
+import javax.tools.JavaFileManager;
+import javax.tools.ToolProvider;
 import jdk.jshell.SourceCodeAnalysis.Documentation;
 import jdk.jshell.SourceCodeAnalysis.QualifiedNames;
 import jdk.jshell.SourceCodeAnalysis.Suggestion;
@@ -1026,11 +1029,20 @@ class ConsoleIOContext extends IOContext {
             }
         };
         ctx.put(DiagnosticListener.class, d -> {});
+
+        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+        if (compiler == null) {
+            throw new UnsupportedOperationException("Compiler not available, must be run with full JDK 9+.");
+        }
+        ctx.put(JavaFileManager.class, compiler.getStandardFileManager(null, null, null));
+
         com.sun.tools.javac.util.Log.instance(ctx).useSource(source);
+        com.sun.tools.javac.parser.ParserFactory parserFactory =
+                com.sun.tools.javac.parser.ParserFactory.instance(ctx);
         com.sun.tools.javac.parser.ScannerFactory scannerFactory =
                 com.sun.tools.javac.parser.ScannerFactory.instance(ctx);
         com.sun.tools.javac.parser.Scanner scanner =
-                scannerFactory.newScanner(code, false);
+                scannerFactory.newScanner(code, false, false, false, false, parserFactory);
 
         while (true) {
             switch (scanner.token().kind) {

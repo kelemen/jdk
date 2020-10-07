@@ -264,6 +264,10 @@ public abstract class JCTree implements Tree, Cloneable, DiagnosticPosition {
          */
         LITERAL,
 
+        /** A string with escaped expressions.
+         */
+        INTERPOLATED_STRING,
+
         /** Basic type identifiers, of type TypeIdent.
          */
         TYPEIDENT,
@@ -2171,6 +2175,26 @@ public abstract class JCTree implements Tree, Cloneable, DiagnosticPosition {
         }
     }
 
+    public static class JCInterpolatedString extends JCExpression implements InterpolatedStringTree {
+        public List<JCExpression> stringParts;
+
+        protected JCInterpolatedString(List<JCExpression> stringParts) {
+            this.stringParts = stringParts;
+        }
+
+        @Override
+        public void accept(Visitor v) { v.visitInterpolatedString(this); }
+
+        @Override @DefinedBy(Api.COMPILER_TREE)
+        public Kind getKind() { return Kind.INTERPOLATED_STRING; }
+        @Override @DefinedBy(Api.COMPILER_TREE)
+        public List<JCExpression> getStringParts() { return stringParts; }
+        @Override @DefinedBy(Api.COMPILER_TREE)
+        public <R, D> R accept(TreeVisitor<R, D> v, D d) { return v.visitInterpolatedString(this, d); }
+        @Override
+        public Tag getTag() { return INTERPOLATED_STRING; }
+    }
+
     /**
      * A type cast.
      */
@@ -3439,6 +3463,7 @@ public abstract class JCTree implements Tree, Cloneable, DiagnosticPosition {
         public void visitAssignop(JCAssignOp that)           { visitTree(that); }
         public void visitUnary(JCUnary that)                 { visitTree(that); }
         public void visitBinary(JCBinary that)               { visitTree(that); }
+        public void visitInterpolatedString(JCInterpolatedString that) { visitTree(that); }
         public void visitTypeCast(JCTypeCast that)           { visitTree(that); }
         public void visitTypeTest(JCInstanceOf that)         { visitTree(that); }
         public void visitBindingPattern(JCBindingPattern that) { visitTree(that); }

@@ -26,6 +26,7 @@
 package jdk.jshell;
 
 import com.sun.tools.javac.code.Source;
+import com.sun.tools.javac.parser.ParserFactory;
 import com.sun.tools.javac.parser.Scanner;
 import com.sun.tools.javac.parser.ScannerFactory;
 import com.sun.tools.javac.parser.Tokens.Token;
@@ -43,6 +44,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.EnumMap;
 import java.util.Iterator;
+import javax.tools.JavaFileManager;
 import jdk.jshell.SourceCodeAnalysis.Completeness;
 import com.sun.source.tree.Tree;
 import static jdk.jshell.CompletenessAnalyzer.TK.*;
@@ -60,6 +62,7 @@ import com.sun.tools.javac.util.Names;
  */
 class CompletenessAnalyzer {
 
+    private final ParserFactory parserFactory;
     private final ScannerFactory scannerFactory;
     private final JShell proc;
     private final Names names;
@@ -81,17 +84,19 @@ class CompletenessAnalyzer {
     CompletenessAnalyzer(JShell proc) {
         this.proc = proc;
         Context context = new Context();
+        context.put(JavaFileManager.class, proc.taskFactory.fileManager());
         Log log = CaLog.createLog(context);
         context.put(Log.class, log);
         context.put(Source.class, Source.JDK9);
         names = Names.instance(context);
+        parserFactory = ParserFactory.instance(context);
         scannerFactory = ScannerFactory.instance(context);
     }
 
     CaInfo scan(String s) {
         try {
             Parser parser = new Parser(
-                    () -> new Matched(scannerFactory.newScanner(s, false)),
+                    () -> new Matched(scannerFactory.newScanner(s, false, false, false, false, parserFactory)),
                     names,
                     worker -> proc.taskFactory.parse(s, worker));
             Completeness stat = parser.parseUnit();
@@ -276,6 +281,8 @@ class CompletenessAnalyzer {
         FALSE(TokenKind.FALSE, XEXPR1|XTERM),  //  false
         NULL(TokenKind.NULL, XEXPR1|XTERM),  //  null
         THIS(TokenKind.THIS, XEXPR1|XTERM),  //  this  -- shouldn't see
+
+        INTERPOLATEDSTRING(TokenKind.INTERPOLATEDSTRING, XEXPR1|XTERM),
 
         // Expressions maybe terminate  //TODO handle these case separately
         PLUSPLUS(TokenKind.PLUSPLUS, XEXPR1|XTERM),  //  ++

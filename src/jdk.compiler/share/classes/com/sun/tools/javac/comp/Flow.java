@@ -2815,6 +2815,11 @@ public class Flow {
             }
         }
 
+        @Override
+        public void visitInterpolatedString(JCInterpolatedString tree) {
+            scanExprs(tree.stringParts);
+        }
+
         public void visitIdent(JCIdent tree) {
             if (tree.sym.kind == VAR) {
                 checkInit(tree.pos(), (VarSymbol)tree.sym);

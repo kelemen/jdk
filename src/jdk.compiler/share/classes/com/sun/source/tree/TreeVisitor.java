@@ -260,6 +260,15 @@ public interface TreeVisitor<R,P> {
     R visitLiteral(LiteralTree node, P p);
 
     /**
+     * Visits an InterpolatedStringTree node.
+     * @param node the node being visited
+     * @param p a parameter value
+     * @return a result value
+     * @since xx
+     */
+    R visitInterpolatedString(InterpolatedStringTree node, P p);
+
+    /**
      * Visits an BindingPattern node.
      * @param node the node being visited
      * @param p a parameter value

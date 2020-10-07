@@ -110,6 +110,17 @@ public class UnicodeReader {
         nextCodePoint();
     }
 
+    protected UnicodeReader(UnicodeReader parent) {
+        buffer = parent.buffer;
+        length = parent.length;
+        position = parent.position;
+        width = parent.width;
+        character = parent.character;
+        codepoint = parent.codepoint;
+        wasBackslash = parent.wasBackslash;
+        log = parent.log;
+    }
+
     /**
      * Returns the length of the buffer. This is length of meaningful content in buffer and
      * not the length of the buffer array.

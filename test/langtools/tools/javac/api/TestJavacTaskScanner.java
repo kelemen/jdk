@@ -171,28 +171,30 @@ class MyScanner extends Scanner {
         }
 
         @Override
-        public Scanner newScanner(CharSequence input, boolean keepDocComments) {
+        public Scanner newScanner(CharSequence input, boolean keepDocComments, ChildParserFactory childParserFactory) {
             if (input instanceof CharBuffer) {
-                return new MyScanner(this, (CharBuffer)input, test);
+                JavaTokenizer tokenizer = new JavaTokenizer(this, (CharBuffer) input, childParserFactory) {
+                };
+                return new MyScanner(this, tokenizer, test);
             } else {
                 char[] array = input.toString().toCharArray();
-                return newScanner(array, array.length, keepDocComments);
+                return newScanner(array, array.length, keepDocComments, childParserFactory);
             }
         }
 
         @Override
-        public Scanner newScanner(char[] input, int inputLength, boolean keepDocComments) {
-            return new MyScanner(this, input, inputLength, test);
+        public Scanner newScanner(char[] input, int inputLength, boolean keepDocComments, ChildParserFactory childParserFactory) {
+            JavaTokenizer tokenizer = new JavaTokenizer(this, input, inputLength, childParserFactory) {
+            };
+            return new MyScanner(this, tokenizer, test);
         }
 
         private TestJavacTaskScanner test;
     }
-    protected MyScanner(ScannerFactory fac, CharBuffer buffer, TestJavacTaskScanner test) {
-        super(fac, buffer);
-        this.test = test;
-    }
-    protected MyScanner(ScannerFactory fac, char[] input, int inputLength, TestJavacTaskScanner test) {
-        super(fac, input, inputLength);
+
+    public MyScanner(ScannerFactory fac, JavaTokenizer tokenizer, TestJavacTaskScanner test) {
+        super(fac, tokenizer);
+
         this.test = test;
     }
 

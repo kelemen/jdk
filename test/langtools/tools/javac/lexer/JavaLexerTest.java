@@ -133,7 +133,9 @@ public class JavaLexerTest {
         });
 
         char[] inputArr = test.input.toCharArray();
-        JavaTokenizer tokenizer = new JavaTokenizer(ScannerFactory.instance(ctx), inputArr, inputArr.length) {};
+        JavaTokenizer tokenizer = new JavaTokenizer(ScannerFactory.instance(ctx), inputArr, inputArr.length, parserInput -> {
+            throw new AssertionError("May not create parser.");
+        }) {};
         Token token = tokenizer.readToken();
         boolean failed = log.nerrors != 0;
         boolean normal = failed == willFail;

@@ -390,6 +390,11 @@ public class MemberEnter extends JCTree.Visitor {
         }
 
         @Override
+        public void visitInterpolatedString(JCInterpolatedString tree) {
+            tree.stringParts.forEach(child -> child.accept(this));
+        }
+
+        @Override
         public void visitConditional(JCConditional tree) {
             tree.cond.accept(this);
             tree.truepart.accept(this);

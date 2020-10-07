@@ -154,6 +154,7 @@ public class Tokens {
         TRUE("true", Tag.NAMED),
         FALSE("false", Tag.NAMED),
         NULL("null", Tag.NAMED),
+        INTERPOLATEDSTRING,
         UNDERSCORE("_", Tag.NAMED),
         ARROW("->"),
         COLCOL("::"),
@@ -243,6 +244,8 @@ public class Tokens {
                 return "token.float";
             case DOUBLELITERAL:
                 return "token.double";
+            case INTERPOLATEDSTRING:
+                return "token.interpolated-string";
             case ERROR:
                 return "token.bad-symbol";
             case EOF:
@@ -409,6 +412,20 @@ public class Tokens {
         @Override
         public Name name() {
             return name;
+        }
+    }
+
+    static class InterpolatedStringToken extends Token {
+        /** Contains StringToken and JCExpression instances (mixed). */
+        private final List<Object> stringParts;
+
+        public InterpolatedStringToken(int pos, int endPos, List<Comment> comments, List<Object> stringParts) {
+            super(TokenKind.INTERPOLATEDSTRING, pos, endPos, comments);
+            this.stringParts = stringParts;
+        }
+
+        public List<Object> getStringParts() {
+            return stringParts;
         }
     }
 

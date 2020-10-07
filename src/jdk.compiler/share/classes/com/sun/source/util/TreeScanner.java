@@ -733,6 +733,18 @@ public class TreeScanner<R,P> implements TreeVisitor<R,P> {
      * @return the result of scanning
      */
     @Override
+    public R visitInterpolatedString(InterpolatedStringTree node, P p) {
+        return scan(node.getStringParts(), p);
+    }
+
+    /**
+     * {@inheritDoc} This implementation scans the children in left to right order.
+     *
+     * @param node  {@inheritDoc}
+     * @param p  {@inheritDoc}
+     * @return the result of scanning
+     */
+    @Override
     public R visitTypeCast(TypeCastTree node, P p) {
         R r = scan(node.getType(), p);
         r = scanAndReduce(node.getExpression(), p, r);

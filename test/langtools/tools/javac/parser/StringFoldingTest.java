@@ -29,13 +29,18 @@
  */
 
 import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.LiteralTree;
+import com.sun.source.tree.Tree;
 import com.sun.source.util.JavacTask;
+import com.sun.source.util.SimpleTreeVisitor;
+import com.sun.source.util.TreeScanner;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.Predicate;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
 import javax.tools.SimpleJavaFileObject;
@@ -43,20 +48,18 @@ import javax.tools.ToolProvider;
 
 public class StringFoldingTest {
     final JavaCompiler tool;
-    final JavaSource source;
 
     public StringFoldingTest() {
         tool = ToolProvider.getSystemJavaCompiler();
-        source = new JavaSource();
     }
 
     static class JavaSource extends SimpleJavaFileObject {
 
-        final static String source =
-                "class C {String X=\"F\" + \"O\" + \"L\" + \"D\" + \"E\" + \"D\";}";
+        final String source;
 
-        JavaSource() {
+        JavaSource(String source) {
             super(URI.create("myfo:/C.java"), JavaFileObject.Kind.SOURCE);
+            this.source = source;
         }
 
         @Override
@@ -72,6 +75,14 @@ public class StringFoldingTest {
     }
 
     void run(boolean disableStringFolding) throws IOException {
+        run("class C {String X=\"F\" + \"O\" + \"L\" + \"D\" + \"E\" + \"D\";}", disableStringFolding);
+        run("class C {String X=\"\\{\"F\"}\\{\"O\"}\\{\"L\"}\\{\"D\"}\\{\"E\"}\\{\"D\"}\";}", disableStringFolding);
+        run("class C {String X=\"\\{\"F\" + \"O\"}\\{\"L\"}\\{\"D\" + \"E\" + \"\\{\"D\"}\"}\";}", disableStringFolding);
+        run("class C {String v=\"x\";String X=v + (\"F\" + \"OLDED\") + \"z\";}", disableStringFolding);
+        run("class C {String X=\"\\{\"F\"}O\\{\"\\{\"L\"}\"}\\{\"\\{\"\\{\"D\"}\"}\"}\\{\"\\{\"\\{\"\\{\"E\"}\"}\"}\"}\\{\"\\{\"\\{\"\\{\"\\{\"D\"}\"}\"}\"}\"}\";}", disableStringFolding);
+    }
+
+    void run(String sourceCodeStr, boolean disableStringFolding) throws IOException {
         List<String> argsList = new ArrayList<String>();
         if (disableStringFolding) {
             argsList.add("-XDallowStringFolding=false");
@@ -79,22 +90,63 @@ public class StringFoldingTest {
         JavacTask ct = (JavacTask)tool.getTask(null, null, null,
                 argsList,
                 null,
-                Arrays.asList(source));
+                Arrays.asList(new JavaSource(sourceCodeStr)));
         Iterable<? extends CompilationUnitTree> trees = ct.parse();
         String text = trees.toString();
         System.out.println(text);
 
         if (disableStringFolding) {
-            if (text.contains("FOLDED")) {
+            if (text.contains("FOLDED") || scanForLiteral(trees, "FOLDED"::equals)) {
                 throw new AssertionError("Expected no string folding");
             }
-            if (!text.contains("\"F\"")) {
+            if (!text.contains("\"F\"") || !scanForLiteral(trees, "F"::equals)) {
                 throw new AssertionError("Expected content not found");
             }
         } else {
-            if (!text.contains("FOLDED")) {
+            if (!text.contains("FOLDED") || !scanForLiteral(trees, "FOLDED"::equals)) {
                 throw new AssertionError("Expected string folding");
             }
         }
+    }
+
+    boolean scanForLiteral(Iterable<? extends CompilationUnitTree> trees, Predicate<? super String> filter) {
+        for (CompilationUnitTree tree : trees) {
+            Boolean found = tree.accept(new TreeScanner<>() {
+                @Override
+                public Boolean reduce(Boolean r1, Boolean r2) {
+                    return (r1 != null && r1) || (r2 != null && r2);
+                }
+
+                @Override
+                public Boolean scan(Tree tree, Boolean value) {
+                    if (tree == null) {
+                        return false;
+                    }
+                    if (value != null && value) {
+                        return true;
+                    }
+
+                    Boolean acceptedLiteral = tree.accept(new SimpleTreeVisitor<>(){
+                        @Override
+                        public Boolean visitLiteral(LiteralTree node, Boolean literalValue) {
+                            if (node.getKind() == Tree.Kind.STRING_LITERAL) {
+                                return filter.test(node.getValue().toString());
+                            } else {
+                                return false;
+                            }
+                        }
+                    }, false);
+                    if (acceptedLiteral != null && acceptedLiteral) {
+                        return true;
+                    }
+
+                    return super.scan(tree, false);
+                }
+            }, false);
+            if (found != null && found) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -635,6 +635,42 @@ public class JavacParser implements Parser {
         return t;
     }
 
+    JCExpression interpolatedString(int pos) {
+        InterpolatedStringToken stringToken = (InterpolatedStringToken) token;
+
+        List<JCExpression> stringParts = stringToken.getStringParts().map(part -> {
+            if (part instanceof StringToken) {
+                return F.at(pos).Literal(
+                        TypeTag.CLASS,
+                        ((StringToken) part).stringVal());
+            } else if (part instanceof JCLiteral) {
+                // If it is simply a string literal, then we have to wrap it
+                // into an InterpolatedString otherwise, we would not
+                // be able to distinguish between literal parts and
+                // expression part.
+                JCLiteral literalPart = (JCLiteral) part;
+
+                if (!allowStringFolding && literalPart.typetag == TypeTag.CLASS) {
+                    return F.at(literalPart.pos)
+                            .InterpolatedString(List.of(literalPart));
+                } else {
+                    return literalPart;
+                }
+            } else if (part instanceof JCExpression) {
+                return (JCExpression) part;
+            } else {
+                Assert.error("Expected StringToken or JCExpression but received " + part.getClass());
+                return null;
+            }
+        });
+        JCExpression t = F.at(pos).InterpolatedString(stringParts);
+        if (t == errorTree)
+            t = F.at(pos).Erroneous();
+        storeEnd(t, token.endPos);
+        nextToken();
+        return t;
+    }
+
     JCExpression literal(Name prefix) {
         return literal(prefix, token.pos);
     }
@@ -1011,18 +1047,100 @@ public class JavacParser implements Parser {
         t = odStack[0];
 
         if (t.hasTag(JCTree.Tag.PLUS)) {
-            t = foldStrings(t);
+            t = foldStringsPlus(t);
         }
 
         odStackSupply.add(odStack);
         opStackSupply.add(opStack);
         return t;
     }
+
+    private JCExpression foldInterpolatedString(JCExpression tree) {
+        if (allowStringFolding && tree.hasTag(INTERPOLATED_STRING)) {
+            return foldInterpolatedString((JCInterpolatedString) tree);
+        } else {
+            return tree;
+        }
+    }
+
+    private JCExpression foldInterpolatedString(JCInterpolatedString tree) {
+        java.util.List<JCExpression> foldedParts = new ArrayList<>();
+
+        boolean changed = false;
+        boolean manyLiterals = false;
+        JCLiteral firstLiteral = null;
+        JCLiteral lastLiteral = null;
+        StringBuilder literalRun = new StringBuilder();
+
+        for (JCExpression child : tree.stringParts) {
+            // TODO: We should actually convert every literal to string,
+            //       not only string literals.
+            JCLiteral literal = stringLiteral(child);
+            if (literal != null) {
+                if (firstLiteral == null) {
+                    firstLiteral = literal;
+                } else {
+                    manyLiterals = true;
+                }
+                literalRun.append(literal.getValue());
+                lastLiteral = literal;
+            } else {
+                if (firstLiteral != null) {
+                    if (manyLiterals) {
+                        changed = true;
+                        foldedParts.add(foldLiteral(firstLiteral, lastLiteral, literalRun));
+                    } else {
+                        foldedParts.add(lastLiteral);
+                    }
+
+                    manyLiterals = false;
+                    literalRun.setLength(0);
+                    firstLiteral = null;
+                }
+
+                foldedParts.add(child);
+            }
+        }
+
+        if (firstLiteral != null) {
+            if (manyLiterals) {
+                changed = true;
+                foldedParts.add(foldLiteral(firstLiteral, lastLiteral, literalRun));
+            } else {
+                foldedParts.add(lastLiteral);
+            }
+        }
+
+        if (foldedParts.size() == 1) {
+            JCExpression folded = foldedParts.get(0);
+            JCLiteral foldedLiteral = stringLiteral(folded);
+            if (foldedLiteral != null) {
+                return foldedLiteral;
+            }
+        }
+
+        if (!changed) {
+            return tree;
+        }
+
+        JCInterpolatedString folded = F.at(tree.pos)
+                .InterpolatedString(List.from(foldedParts));
+        storeEnd(folded, tree.getEndPosition(endPosTable));
+        return folded;
+    }
+
+    private JCLiteral foldLiteral(JCLiteral firstLiteral, JCLiteral lastLiteral, StringBuilder literalRun) {
+        JCLiteral foldedLiteral = F.at(firstLiteral.pos)
+                .Literal(TypeTag.CLASS, literalRun.toString());
+        storeEnd(foldedLiteral, lastLiteral.getEndPosition(endPosTable));
+        return foldedLiteral;
+    }
+
     //where
         /** If tree is a concatenation of string literals, replace it
          *  by a single literal representing the concatenated string.
          */
-        protected JCExpression foldStrings(JCExpression tree) {
+        private JCExpression foldStringsPlus(JCExpression tree) {
             if (!allowStringFolding)
                 return tree;
             ListBuffer<JCExpression> opStack = new ListBuffer<>();
@@ -1235,6 +1353,12 @@ public class JavacParser implements Parser {
             if (typeArgs == null && (mode & EXPR) != 0) {
                 selectExprMode();
                 t = literal(names.empty);
+            } else return illegal();
+            break;
+        case INTERPOLATEDSTRING:
+            if (typeArgs == null && (mode & EXPR) != 0) {
+                selectExprMode();
+                t = foldInterpolatedString(interpolatedString(pos));
             } else return illegal();
             break;
         case NEW:

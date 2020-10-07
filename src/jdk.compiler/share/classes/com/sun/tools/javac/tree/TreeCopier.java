@@ -282,6 +282,13 @@ public class TreeCopier<P> implements TreeVisitor<JCTree,P> {
         return M.at(t.pos).Literal(t.typetag, t.value);
     }
 
+    @Override @DefinedBy(Api.COMPILER_TREE)
+    public JCInterpolatedString visitInterpolatedString(InterpolatedStringTree node, P p) {
+        JCInterpolatedString t = (JCInterpolatedString) node;
+        List<JCExpression> stringParts = copy(t.getStringParts());
+        return M.at(t.pos).InterpolatedString(stringParts);
+    }
+
     @DefinedBy(Api.COMPILER_TREE)
     public JCTree visitMethod(MethodTree node, P p) {
         JCMethodDecl t  = (JCMethodDecl) node;

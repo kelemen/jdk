@@ -1325,6 +1325,44 @@ public class Pretty extends JCTree.Visitor {
         }
     }
 
+    @Override
+    public void visitInterpolatedString(JCInterpolatedString tree) {
+        try {
+            print("\"");
+            tree.stringParts.forEach(child -> {
+                child.accept(new Visitor() {
+                    @Override
+                    public void visitTree(JCTree childTree) {
+                        try {
+                            print("\\{");
+                            printExpr(childTree);
+                            print("}");
+                        } catch (IOException e) {
+                            throw new UncheckedIOException(e);
+                        }
+                    }
+
+                    @Override
+                    public void visitLiteral(JCLiteral literal) {
+                        if (literal.typetag == TypeTag.CLASS) {
+                            // String literal
+                            try {
+                                print(Convert.quote(literal.value.toString()));
+                            } catch (IOException e) {
+                                throw new UncheckedIOException(e);
+                            }
+                        } else {
+                            visitTree(literal);
+                        }
+                    }
+                });
+            });
+            print("\"");
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     public void visitTypeCast(JCTypeCast tree) {
         try {
             open(prec, TreeInfo.prefixPrec);

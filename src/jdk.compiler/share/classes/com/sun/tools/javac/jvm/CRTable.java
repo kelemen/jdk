@@ -469,6 +469,12 @@ implements CRTFlags {
             result = sr;
         }
 
+        public void visitInterpolatedString(JCInterpolatedString tree) {
+            SourceRange sr = new SourceRange(startPos(tree), endPos(tree));
+            tree.stringParts.forEach(child -> sr.mergeWith(csp(child)));
+            result = sr;
+        }
+
         public void visitTypeCast(JCTypeCast tree) {
             SourceRange sr = new SourceRange(startPos(tree), endPos(tree));
             sr.mergeWith(csp(tree.clazz));

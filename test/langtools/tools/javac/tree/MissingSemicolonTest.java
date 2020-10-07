@@ -45,6 +45,7 @@ import com.sun.source.tree.*;
 import com.sun.source.tree.Tree.Kind;
 import com.sun.source.util.*;
 import com.sun.tools.javac.api.JavacTool;
+import com.sun.tools.javac.parser.ParserFactory;
 import com.sun.tools.javac.parser.Scanner;
 import com.sun.tools.javac.parser.ScannerFactory;
 import com.sun.tools.javac.tree.JCTree;
@@ -141,7 +142,7 @@ public class MissingSemicolonTest {
                         int expectedEnd = expected[1];
 
                         if (expectedEnd == semicolon + 1) {
-                            Scanner scanner = scannerFactory.newScanner(updatedContent, true);
+                            Scanner scanner = scannerFactory.newScanner(updatedContent, true, false, false, false, parserFactory);
                             scanner.nextToken();
                             while (scanner.token().pos < expectedEnd)
                                 scanner.nextToken();
@@ -163,7 +164,16 @@ public class MissingSemicolonTest {
     DiagnosticListener<JavaFileObject> devNull = (d) -> {};
     JavacTool tool = JavacTool.create();
     StandardJavaFileManager fm = tool.getStandardFileManager(devNull, null, null);
-    ScannerFactory scannerFactory = ScannerFactory.instance(new Context());
+
+    Context context = new Context();
+    ParserFactory parserFactory;
+    ScannerFactory scannerFactory;
+
+    {
+        context.put(JavaFileManager.class, fm);
+        parserFactory = ParserFactory.instance(context);
+        scannerFactory = ScannerFactory.instance(context);
+    }
 
     /**
      * Read a file.

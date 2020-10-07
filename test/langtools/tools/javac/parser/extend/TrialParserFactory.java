@@ -49,7 +49,7 @@ class TrialParserFactory extends ParserFactory {
 
     @Override
     public JavacParser newParser(CharSequence input, boolean keepDocComments, boolean keepEndPos, boolean keepLineMap) {
-        com.sun.tools.javac.parser.Lexer lexer = scannerFactory.newScanner(input, keepDocComments);
+        com.sun.tools.javac.parser.Lexer lexer = scannerFactory.newScanner(input, keepDocComments, keepEndPos, keepLineMap, false, this);
         return new TrialParser(this, lexer, keepDocComments, keepLineMap, keepEndPos);
     }
 
